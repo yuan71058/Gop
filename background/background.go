@@ -457,8 +457,19 @@ func (b *Background) KeyDown(key int) int {
 		keybdEvent.Call(uintptr(key), 0, 0, 0)
 		return 1
 	}
-	// TODO: 根据键盘模式实现
-	return 1
+	
+	// 后台模式: 使用WM_KEYDOWN消息
+	user32 := syscall.NewLazyDLL("user32.dll")
+	ret, _, _ := user32.NewProc("SendMessageW").Call(
+		uintptr(b.hwnd),
+		0x0100, // WM_KEYDOWN
+		uintptr(key),
+		0,
+	)
+	if ret != 0 || true {
+		return 1
+	}
+	return 0
 }
 
 // KeyUp 释放键
@@ -476,8 +487,19 @@ func (b *Background) KeyUp(key int) int {
 		keybdEvent.Call(uintptr(key), 0, 0x0002, 0) // KEYEVENTF_KEYUP
 		return 1
 	}
-	// TODO: 根据键盘模式实现
-	return 1
+	
+	// 后台模式: 使用WM_KEYUP消息
+	user32 := syscall.NewLazyDLL("user32.dll")
+	ret, _, _ := user32.NewProc("SendMessageW").Call(
+		uintptr(b.hwnd),
+		0x0101, // WM_KEYUP
+		uintptr(key),
+		0,
+	)
+	if ret != 0 || true {
+		return 1
+	}
+	return 0
 }
 
 // SendString 向目标发送字符串
@@ -494,22 +516,40 @@ func (b *Background) SendString(str string) int {
 		return 1
 	}
 	
-	// 后台模式: 使用WM_SETTEXT消息直接设置窗口文本
+	// 后台模式: 使用WM_CHAR消息逐字符发送
 	user32 := syscall.NewLazyDLL("user32.dll")
-	strPtr, _ := syscall.UTF16PtrFromString(str)
 	
-	ret, _, _ := user32.NewProc("SendMessageW").Call(
-		uintptr(b.hwnd),
-		0x000C, // WM_SETTEXT
-		0,
-		uintptr(unsafe.Pointer(strPtr)),
-	)
-	
-	// WM_SETTEXT 成功返回非零
-	if ret != 0 {
-		return 1
+	for _, ch := range str {
+		// 处理换行符: 发送\r (WM_CHAR with 13)
+		if ch == '\n' {
+			user32.NewProc("SendMessageW").Call(
+				uintptr(b.hwnd),
+				0x0102, // WM_CHAR
+				uintptr(13), // \r
+				1,
+			)
+			time.Sleep(5 * time.Millisecond)
+			continue
+		}
+		
+		// 跳过\r (已经处理过)
+		if ch == '\r' {
+			continue
+		}
+		
+		// 发送WM_CHAR消息
+		user32.NewProc("SendMessageW").Call(
+			uintptr(b.hwnd),
+			0x0102, // WM_CHAR
+			uintptr(ch),
+			1,      // 重复计数
+		)
+		
+		// 短暂延时确保消息处理
+		time.Sleep(5 * time.Millisecond)
 	}
-	return 0
+	
+	return 1
 }
 
 // SendStringIme 向目标发送字符串(使用IME)

@@ -69,17 +69,18 @@ func (w *TextWorker) BindWindow() bool {
 func (w *TextWorker) WriteText() {
 	fmt.Printf("[线程%d] 开始写入文字...\n", w.ID)
 
-	// 使用SendString发送文字(绑定窗口后使用后台模式)
+	// 使用SendString发送完整内容(包含换行符)
 	ret := w.OP.SendString(w.EditHwnd, w.Content)
 	if ret != 1 {
 		fmt.Printf("[线程%d] SendString失败: %d\n", w.ID, ret)
 		return
 	}
 
-	// 延时,让文字显示更清晰
-	time.Sleep(500 * time.Millisecond)
+	// 计算行数和字符数
+	lines := strings.Split(w.Content, "\n")
+	totalChars := len([]rune(w.Content))
 
-	fmt.Printf("[线程%d] 写入完成, 共%d个字符\n", w.ID, len([]rune(w.Content)))
+	fmt.Printf("[线程%d] 写入完成, 共%d个字符, %d行\n", w.ID, totalChars, len(lines))
 }
 
 // UnbindWindow 解绑窗口
@@ -156,6 +157,23 @@ func ParsePidList(pidList string) []int {
 	}
 
 	return pids
+}
+
+// generateTextContent 生成多行文本内容
+// 参数:
+//
+//	threadID: 线程ID
+//	lineCount: 行数
+//
+// 返回值:
+//
+//	string: 生成的文本内容
+func generateTextContent(threadID int, lineCount int) string {
+	var sb strings.Builder
+	for i := 1; i <= lineCount; i++ {
+		sb.WriteString(fmt.Sprintf("线程%d - 第%d行: GOP多线程文本输入测试内容。\n", threadID, i))
+	}
+	return sb.String()
 }
 
 func main() {
@@ -265,11 +283,11 @@ func main() {
 	fmt.Println("\n========== 第五步: 创建GOP子对象并绑定编辑框控件 ==========")
 	var wg sync.WaitGroup
 
-	// 准备不同的文字内容
+	// 准备不同的文字内容(每个50行)
 	contents := []string{
-		"Hello GOP! 这是线程1输入的文本内容。",
-		"Hello GOP! 这是线程2输入的文本内容。",
-		"Hello GOP! 这是线程3输入的文本内容。",
+		generateTextContent(1, 50),
+		generateTextContent(2, 50),
+		generateTextContent(3, 50),
 	}
 
 	// 创建工作线程(GOP子对象)
