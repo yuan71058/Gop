@@ -176,12 +176,19 @@ else:
     print("窗口绑定失败!")
     exit()
 
-# 6. 向记事本窗口输入一句话
-print("\n6. 向记事本输入文本...")
-dll.KeyPressChar.argtypes = [ctypes.c_char_p]
-dll.KeyPressChar.restype = ctypes.c_int
+# 6. 向记事本Edit控件输入文本
+print("\n6. 向记事本Edit控件输入文本...")
+dll.FindWindowEx.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_char_p]
+dll.FindWindowEx.restype = ctypes.c_int
+dll.SendString.argtypes = [ctypes.c_int, ctypes.c_char_p]
+dll.SendString.restype = ctypes.c_int
+edit_hwnd = dll.FindWindowEx(hwnd, b"Edit", b"")
+if edit_hwnd == 0:
+    print("未找到Edit控件!")
+    exit()
+print(f"找到Edit控件, 句柄: {edit_hwnd}")
 text = "Hello GOP! 这是从Python示例输入的文本。"
-dll.KeyPressChar(text.encode('gbk'))
+dll.SendString(edit_hwnd, text.encode('gbk'))
 print(f"已输入: {text}")
 
 # 7. 延时5秒
@@ -214,7 +221,8 @@ typedef int (*CreateOpFunc)();
 typedef const char* (*VerFunc)();
 typedef int (*FindWindowFunc)(const char*, const char*);
 typedef int (*BindWindowFunc)(int, const char*, const char*, const char*, int);
-typedef int (*KeyPressCharFunc)(const char*);
+typedef int (*FindWindowExFunc)(int, const char*, const char*);
+typedef int (*SendStringFunc)(int, const char*);
 typedef int (*DelayFunc)(int);
 typedef int (*CloseWindowFunc)(int);
 
@@ -231,7 +239,8 @@ int main() {
     VerFunc Ver = (VerFunc)GetProcAddress(hModule, "Ver");
     FindWindowFunc FindWindow = (FindWindowFunc)GetProcAddress(hModule, "FindWindow");
     BindWindowFunc BindWindow = (BindWindowFunc)GetProcAddress(hModule, "BindWindow");
-    KeyPressCharFunc KeyPressChar = (KeyPressCharFunc)GetProcAddress(hModule, "KeyPressChar");
+    FindWindowExFunc FindWindowEx = (FindWindowExFunc)GetProcAddress(hModule, "FindWindowEx");
+    SendStringFunc SendString = (SendStringFunc)GetProcAddress(hModule, "SendString");
     DelayFunc Delay = (DelayFunc)GetProcAddress(hModule, "Delay");
     CloseWindowFunc CloseWindow = (CloseWindowFunc)GetProcAddress(hModule, "CloseWindow");
 
@@ -268,10 +277,16 @@ int main() {
         return -1;
     }
 
-    // 6. 向记事本窗口输入一句话
-    std::cout << "\n6. 向记事本输入文本..." << std::endl;
+    // 6. 向记事本Edit控件输入文本
+    std::cout << "\n6. 向记事本Edit控件输入文本..." << std::endl;
+    int editHwnd = FindWindowEx(hwnd, "Edit", "");
+    if (editHwnd == 0) {
+        std::cerr << "未找到Edit控件!" << std::endl;
+        return -1;
+    }
+    std::cout << "找到Edit控件, 句柄: " << editHwnd << std::endl;
     const char* text = "Hello GOP! 这是从C++示例输入的文本。";
-    KeyPressChar(text);
+    SendString(editHwnd, text);
     std::cout << "已输入: " << text << std::endl;
 
     // 7. 延时5秒

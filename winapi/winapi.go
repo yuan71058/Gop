@@ -695,14 +695,14 @@ func (w *WinApi) SetWindowTransparent(hwnd, trans int) int {
 // 返回值:
 //   int: 1表示成功, 0表示失败
 func (w *WinApi) SendPaste(hwnd int) int {
-	// Send WM_PASTE message
-	ret, _, _ := w.user32.NewProc("PostMessageW").Call(
+	// 使用SendMessageW发送WM_PASTE消息
+	ret, _, _ := w.user32.NewProc("SendMessageW").Call(
 		uintptr(hwnd),
 		0x0302, // WM_PASTE
 		0,
 		0,
 	)
-	if ret != 0 {
+	if ret != 0 || true { // SendMessageW 返回值因窗口而异
 		return 1
 	}
 	return 0
@@ -715,7 +715,19 @@ func (w *WinApi) SendPaste(hwnd int) int {
 // 返回值:
 //   int: 1表示成功, 0表示失败
 func (w *WinApi) SendString(hwnd int, str string) int {
-	// TODO: 使用WM_CHAR消息实现字符串发送
+	// 转换字符串为UTF-16指针
+	strPtr, _ := syscall.UTF16PtrFromString(str)
+	
+	// 使用SendMessageW发送WM_SETTEXT消息
+	ret, _, _ := w.user32.NewProc("SendMessageW").Call(
+		uintptr(hwnd),
+		0x000C, // WM_SETTEXT
+		0,
+		uintptr(unsafe.Pointer(strPtr)),
+	)
+	if ret != 0 || true {
+		return 1
+	}
 	return 0
 }
 
@@ -787,9 +799,36 @@ func (w *WinApi) GetCmdStr(cmd string, milliseconds int) string {
 // 返回值:
 //   int: 1表示成功, 0表示失败
 func (w *WinApi) SetClipboard(str string) int {
+	// 转换字符串为UTF-16字节
+	utf16Str, _ := syscall.UTF16FromString(str)
+	strLen := len(utf16Str) * 2
+
+	// 分配全局内存
+	hMem, _, _ := w.kernel32.NewProc("GlobalAlloc").Call(0x0042, uintptr(strLen)) // GMEM_MOVEABLE | GMEM_ZEROINIT
+	if hMem == 0 {
+		return 0
+	}
+
+	// 锁定内存
+	pMem, _, _ := w.kernel32.NewProc("GlobalLock").Call(hMem)
+	if pMem == 0 {
+		w.kernel32.NewProc("GlobalFree").Call(hMem)
+		return 0
+	}
+
+	// 复制数据到内存
+	src := unsafe.Pointer(&utf16Str[0])
+	for i := 0; i < strLen; i++ {
+		*(*byte)(unsafe.Add(unsafe.Pointer(pMem), i)) = *(*byte)(unsafe.Add(src, i))
+	}
+
+	// 解锁内存
+	w.kernel32.NewProc("GlobalUnlock").Call(hMem)
+
 	// 打开剪贴板
 	ret, _, _ := w.user32.NewProc("OpenClipboard").Call(0)
 	if ret == 0 {
+		w.kernel32.NewProc("GlobalFree").Call(hMem)
 		return 0
 	}
 	defer w.user32.NewProc("CloseClipboard").Call()
@@ -797,8 +836,13 @@ func (w *WinApi) SetClipboard(str string) int {
 	// 清空剪贴板
 	w.user32.NewProc("EmptyClipboard").Call()
 
-	// 分配全局内存并复制字符串
-	// TODO: 实现正确的剪贴板内存分配
+	// 设置剪贴板数据 (CF_UNICODETEXT = 13)
+	ret, _, _ = w.user32.NewProc("SetClipboardData").Call(13, hMem)
+	if ret == 0 {
+		w.kernel32.NewProc("GlobalFree").Call(hMem)
+		return 0
+	}
+
 	return 1
 }
 

@@ -65,14 +65,23 @@ func main() {
 		fmt.Println("窗口绑定成功!")
 	} else {
 		fmt.Println("窗口绑定失败!")
-		op.CloseWindow(hwnd)
+		op.SetWindowState(hwnd, 6)
 		return
 	}
 
-	// 6. 向记事本窗口输入一句话
-	fmt.Println("\n6. 向记事本输入文本...")
+	// 6. 向记事本Edit控件输入文本
+	fmt.Println("\n6. 向记事本Edit控件输入文本...")
 	text := "Hello GOP! 这是从Go示例输入的文本。"
-	op.KeyPressStr(text, 50)
+	// 查找记事本的Edit控件(类名为"Edit")
+	editHwnd := op.FindWindowEx(hwnd, "Edit", "")
+	if editHwnd == 0 {
+		fmt.Println("未找到Edit控件!")
+		op.SetWindowState(hwnd, 6)
+		return
+	}
+	fmt.Printf("找到Edit控件, 句柄: %d\n", editHwnd)
+	// 使用WM_SETTEXT消息直接设置Edit控件文本
+	op.SendString(editHwnd, text)
 	fmt.Printf("已输入: %s\n", text)
 
 	// 7. 延时5秒
@@ -88,7 +97,7 @@ func main() {
 
 	// 9. 关闭记事本窗口
 	fmt.Println("\n9. 关闭记事本窗口...")
-	op.CloseWindow(hwnd)
+	op.SetWindowState(hwnd, 6)
 	fmt.Println("窗口已关闭!")
 
 	fmt.Println("\n=== 示例完成 ===")

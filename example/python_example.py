@@ -47,6 +47,14 @@ class GOPLib:
         self.dll.BindWindow.restype = ctypes.c_int
         self.dll.UnBindWindow.restype = ctypes.c_int
 
+        # 子窗口查找
+        self.dll.FindWindowEx.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_char_p]
+        self.dll.FindWindowEx.restype = ctypes.c_int
+
+        # 文本输入
+        self.dll.SendString.argtypes = [ctypes.c_int, ctypes.c_char_p]
+        self.dll.SendString.restype = ctypes.c_int
+
         # 键盘操作
         self.dll.KeyPressChar.argtypes = [ctypes.c_char_p]
         self.dll.KeyPressChar.restype = ctypes.c_int
@@ -94,6 +102,14 @@ class GOPLib:
     def unbind_window(self):
         """解绑窗口"""
         return self.dll.UnBindWindow()
+
+    def find_window_ex(self, parent, class_name, title):
+        """查找子窗口"""
+        return self.dll.FindWindowEx(parent, class_name.encode(), title.encode())
+
+    def send_string(self, hwnd, text):
+        """发送文本到窗口"""
+        return self.dll.SendString(hwnd, text.encode('gbk'))
 
     def key_press_char(self, char):
         """按键输入"""
@@ -166,10 +182,18 @@ def main():
         gop.close_window(hwnd)
         return
 
-    # 6. 向记事本窗口输入一句话
-    print("\n6. 向记事本输入文本...")
+    # 6. 向记事本Edit控件输入文本
+    print("\n6. 向记事本Edit控件输入文本...")
     text = "Hello GOP! 这是从Python示例输入的文本。"
-    gop.key_press_char(text)
+    # 查找记事本的Edit控件(类名为"Edit")
+    edit_hwnd = gop.find_window_ex(hwnd, "Edit", "")
+    if edit_hwnd == 0:
+        print("未找到Edit控件!")
+        gop.close_window(hwnd)
+        return
+    print(f"找到Edit控件, 句柄: {edit_hwnd}")
+    # 使用WM_SETTEXT消息直接设置Edit控件文本
+    gop.send_string(edit_hwnd, text)
     print(f"已输入: {text}")
 
     # 7. 延时5秒

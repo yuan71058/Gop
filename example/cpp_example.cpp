@@ -20,7 +20,8 @@ typedef int (*GetWindowRectFunc)(int, int*, int*, int*, int*);
 typedef int (*GetClientSizeFunc)(int, int*, int*);
 typedef int (*BindWindowFunc)(int, const char*, const char*, const char*, int);
 typedef int (*UnBindWindowFunc)();
-typedef int (*KeyPressCharFunc)(const char*);
+typedef int (*FindWindowExFunc)(int, const char*, const char*);
+typedef int (*SendStringFunc)(int, const char*);
 typedef int (*DelayFunc)(int);
 typedef int (*CloseWindowFunc)(int);
 
@@ -34,7 +35,8 @@ GetWindowRectFunc GetWindowRect = nullptr;
 GetClientSizeFunc GetClientSize = nullptr;
 BindWindowFunc BindWindow = nullptr;
 UnBindWindowFunc UnBindWindow = nullptr;
-KeyPressCharFunc KeyPressChar = nullptr;
+FindWindowExFunc FindWindowEx = nullptr;
+SendStringFunc SendString = nullptr;
 DelayFunc Delay = nullptr;
 CloseWindowFunc CloseWindow = nullptr;
 
@@ -59,12 +61,13 @@ bool LoadGOPDll(const char* dllPath) {
     GetClientSize = (GetClientSizeFunc)GetProcAddress(g_hModule, "GetClientSize");
     BindWindow = (BindWindowFunc)GetProcAddress(g_hModule, "BindWindow");
     UnBindWindow = (UnBindWindowFunc)GetProcAddress(g_hModule, "UnBindWindow");
-    KeyPressChar = (KeyPressCharFunc)GetProcAddress(g_hModule, "KeyPressChar");
+    FindWindowEx = (FindWindowExFunc)GetProcAddress(g_hModule, "FindWindowEx");
+    SendString = (SendStringFunc)GetProcAddress(g_hModule, "SendString");
     Delay = (DelayFunc)GetProcAddress(g_hModule, "Delay");
     CloseWindow = (CloseWindowFunc)GetProcAddress(g_hModule, "CloseWindow");
 
     // 检查所有函数是否加载成功
-    if (!CreateOp || !Ver || !FindWindow || !BindWindow || !KeyPressChar || !Delay || !CloseWindow) {
+    if (!CreateOp || !Ver || !FindWindow || !BindWindow || !FindWindowEx || !SendString || !Delay || !CloseWindow) {
         std::cerr << "无法获取 GOP 函数地址" << std::endl;
         FreeLibrary(g_hModule);
         g_hModule = nullptr;
@@ -150,10 +153,20 @@ int main() {
         return -1;
     }
 
-    // 6. 向记事本窗口输入一句话
-    std::cout << "\n6. 向记事本输入文本..." << std::endl;
+    // 6. 向记事本Edit控件输入文本
+    std::cout << "\n6. 向记事本Edit控件输入文本..." << std::endl;
     const char* text = "Hello GOP! 这是从C++示例输入的文本。";
-    KeyPressChar(text);
+    // 查找记事本的Edit控件(类名为"Edit")
+    int editHwnd = FindWindowEx(hwnd, "Edit", "");
+    if (editHwnd == 0) {
+        std::cerr << "未找到Edit控件!" << std::endl;
+        CloseWindow(hwnd);
+        FreeGOPDll();
+        return -1;
+    }
+    std::cout << "找到Edit控件, 句柄: " << editHwnd << std::endl;
+    // 使用WM_SETTEXT消息直接设置Edit控件文本
+    SendString(editHwnd, text);
     std::cout << "已输入: " << text << std::endl;
 
     // 7. 延时5秒
