@@ -742,6 +742,31 @@ func (w *WinApi) SendStringIme(hwnd int, str string) int {
 	return 0
 }
 
+// TerminateProcess 结束指定进程
+// 参数:
+//   pid: 进程ID
+// 返回值:
+//   int: 1表示成功, 0表示失败
+func (w *WinApi) TerminateProcess(pid int) int {
+	// 打开进程
+	hProcess, _, _ := w.kernel32.NewProc("OpenProcess").Call(
+		0x0001, // PROCESS_TERMINATE
+		0,
+		uintptr(pid),
+	)
+	if hProcess == 0 {
+		return 0
+	}
+	defer w.kernel32.NewProc("CloseHandle").Call(hProcess)
+
+	// 终止进程
+	ret, _, _ := w.kernel32.NewProc("TerminateProcess").Call(hProcess, 0)
+	if ret != 0 {
+		return 1
+	}
+	return 0
+}
+
 // RunApp 运行一个可执行文件，根据指定模式
 // 参数:
 //   cmdline: 命令行

@@ -23,7 +23,8 @@ typedef int (*UnBindWindowFunc)();
 typedef int (*FindWindowExFunc)(int, const char*, const char*);
 typedef int (*SendStringFunc)(int, const char*);
 typedef int (*DelayFunc)(int);
-typedef int (*CloseWindowFunc)(int);
+typedef int (*GetWindowProcessIdFunc)(int);
+typedef int (*TerminateProcessFunc)(int);
 
 // 全局变量
 HMODULE g_hModule = nullptr;
@@ -38,7 +39,8 @@ UnBindWindowFunc UnBindWindow = nullptr;
 FindWindowExFunc FindWindowEx = nullptr;
 SendStringFunc SendString = nullptr;
 DelayFunc Delay = nullptr;
-CloseWindowFunc CloseWindow = nullptr;
+GetWindowProcessIdFunc GetWindowProcessId = nullptr;
+TerminateProcessFunc TerminateProcess = nullptr;
 
 /**
  * 加载 GOP DLL
@@ -64,10 +66,11 @@ bool LoadGOPDll(const char* dllPath) {
     FindWindowEx = (FindWindowExFunc)GetProcAddress(g_hModule, "FindWindowEx");
     SendString = (SendStringFunc)GetProcAddress(g_hModule, "SendString");
     Delay = (DelayFunc)GetProcAddress(g_hModule, "Delay");
-    CloseWindow = (CloseWindowFunc)GetProcAddress(g_hModule, "CloseWindow");
+    GetWindowProcessId = (GetWindowProcessIdFunc)GetProcAddress(g_hModule, "GetWindowProcessId");
+    TerminateProcess = (TerminateProcessFunc)GetProcAddress(g_hModule, "TerminateProcess");
 
     // 检查所有函数是否加载成功
-    if (!CreateOp || !Ver || !FindWindow || !BindWindow || !FindWindowEx || !SendString || !Delay || !CloseWindow) {
+    if (!CreateOp || !Ver || !FindWindow || !BindWindow || !FindWindowEx || !SendString || !Delay || !GetWindowProcessId || !TerminateProcess) {
         std::cerr << "无法获取 GOP 函数地址" << std::endl;
         FreeLibrary(g_hModule);
         g_hModule = nullptr;
@@ -180,10 +183,16 @@ int main() {
     UnBindWindow();
     std::cout << "窗口已解绑!" << std::endl;
 
-    // 9. 关闭记事本窗口
-    std::cout << "\n9. 关闭记事本窗口..." << std::endl;
-    CloseWindow(hwnd);
-    std::cout << "窗口已关闭!" << std::endl;
+    // 9. 结束记事本进程
+    std::cout << "\n9. 结束记事本进程..." << std::endl;
+    int pid = GetWindowProcessId(hwnd);
+    if (pid > 0) {
+        std::cout << "记事本进程ID: " << pid << std::endl;
+        TerminateProcess(pid);
+        std::cout << "进程已终止!" << std::endl;
+    } else {
+        std::cerr << "无法获取进程ID!" << std::endl;
+    }
 
     // 10. 释放DLL
     std::cout << "\n10. 释放插件..." << std::endl;

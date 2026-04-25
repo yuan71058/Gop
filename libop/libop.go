@@ -566,6 +566,15 @@ func (op *LibOP) GetCmdStr(cmd string, milliseconds int) string {
 	return op.winapi.GetCmdStr(cmd, milliseconds)
 }
 
+// TerminateProcess 结束指定进程
+// 参数:
+//   pid: 进程ID
+// 返回值:
+//   int: 1表示成功, 0表示失败
+func (op *LibOP) TerminateProcess(pid int) int {
+	return op.winapi.TerminateProcess(pid)
+}
+
 // SetClipboard 设置剪贴板数据
 // 参数:
 //   str: 文本字符串

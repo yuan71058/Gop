@@ -95,10 +95,16 @@ func main() {
 	op.UnBindWindow()
 	fmt.Println("窗口已解绑!")
 
-	// 9. 关闭记事本窗口
-	fmt.Println("\n9. 关闭记事本窗口...")
-	op.SetWindowState(hwnd, 6)
-	fmt.Println("窗口已关闭!")
+	// 9. 结束记事本进程
+	fmt.Println("\n9. 结束记事本进程...")
+	pid := op.GetWindowProcessId(hwnd)
+	if pid > 0 {
+		fmt.Printf("记事本进程ID: %d\n", pid)
+		op.TerminateProcess(pid)
+		fmt.Println("进程已终止!")
+	} else {
+		fmt.Println("无法获取进程ID!")
+	}
 
 	fmt.Println("\n=== 示例完成 ===")
 }
