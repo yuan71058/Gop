@@ -1,206 +1,351 @@
 // Package algorithm 提供算法实现
-// 该包包含A*寻路算法等算法实现
+// 该包包含A*路径查找算法和其他工具算法
 package algorithm
 
 import (
 	"container/heap"
-	"math"
+	"fmt"
+	"strings"
 )
 
-// Point 二维坐标点
-// 用于A*算法中的节点
+// Point 表示二维坐标
 type Point struct {
 	X int
 	Y int
 }
 
-// Equals 判断两个点是否相等
+// AStar 实现A*路径查找算法
+// 用于在网格地图中查找最短路径
+type AStar struct {
+	mapWidth  int              // 地图宽度
+	mapHeight int              // 地图高度
+	obstacles map[Point]bool   // 障碍点
+}
+
+// NewAStar 创建新的AStar实例
+// 返回值:
+//   *AStar: AStar实例
+func NewAStar() *AStar {
+	return &AStar{
+		obstacles: make(map[Point]bool),
+	}
+}
+
+// AStarFindPath 使用A*算法查找路径
 // 参数:
-//   other: 另一个点
+//   mapWidth: 地图宽度
+//   mapHeight: 地图高度
+//   disablePoints: 障碍点字符串, 格式: "x1,y1|x2,y2|..."
+//   beginX: 起点X坐标
+//   beginY: 起点Y坐标
+//   endX: 终点X坐标
+//   endY: 终点Y坐标
 // 返回值:
-//   bool: 是否相等
-func (p Point) Equals(other Point) bool {
-	return p.X == other.X && p.Y == other.Y
+//   string: 路径结果, 格式: "x1,y1|x2,y2|..."
+func (a *AStar) AStarFindPath(mapWidth, mapHeight int, disablePoints string, beginX, beginY, endX, endY int) string {
+	a.mapWidth = mapWidth
+	a.mapHeight = mapHeight
+
+	// 解析障碍点
+	a.parseObstacles(disablePoints)
+
+	// 创建起点和终点
+	start := Point{X: beginX, Y: beginY}
+	end := Point{X: endX, Y: endY}
+
+	// 验证点
+	if !a.isValid(start) || !a.isValid(end) {
+		return ""
+	}
+
+	// 检查起点或终点是否为障碍
+	if a.obstacles[start] || a.obstacles[end] {
+		return ""
+	}
+
+	// 运行A*算法
+	path := a.findPath(start, end)
+	if len(path) == 0 {
+		return ""
+	}
+
+	// 转换路径为字符串
+	return a.pathToString(path)
 }
 
-// Node A*算法节点
-// 包含位置信息和路径代价
-type Node struct {
-	Point
-	GCost   int     // 从起点到当前节点的实际代价
-	HCost   int     // 从当前节点到终点的估计代价
-	Parent  *Node   // 父节点
+// FindNearestPos 从位置列表中查找到目标点最近的位置
+// 参数:
+//   allPos: 所有位置字符串, 格式: "x1,y1|x2,y2|..."
+//   posType: 位置类型 (0=欧几里得距离, 1=曼哈顿距离)
+//   x: 目标X坐标
+//   y: 目标Y坐标
+// 返回值:
+//   string: 最近位置, 格式: "x,y"
+func (a *AStar) FindNearestPos(allPos string, posType, x, y int) string {
+	if allPos == "" {
+		return ""
+	}
+
+	positions := strings.Split(allPos, "|")
+	if len(positions) == 0 {
+		return ""
+	}
+
+	var nearestPos string
+	minDist := -1
+
+	for _, pos := range positions {
+		var px, py int
+		if _, err := fmt.Sscanf(pos, "%d,%d", &px, &py); err != nil {
+			continue
+		}
+
+		// 根据类型计算距离
+		var dist int
+		if posType == 0 {
+			// 欧几里得距离(平方以避免sqrt)
+			dx := px - x
+			dy := py - y
+			dist = dx*dx + dy*dy
+		} else {
+			// 曼哈顿距离
+			dx := px - x
+			dy := py - y
+			if dx < 0 {
+				dx = -dx
+			}
+			if dy < 0 {
+				dy = -dy
+			}
+			dist = dx + dy
+		}
+
+		if minDist == -1 || dist < minDist {
+			minDist = dist
+			nearestPos = pos
+		}
+	}
+
+	return nearestPos
 }
 
-// FCost 获取总代价 (G + H)
-// 返回值:
-//   int: 总代价
-func (n *Node) FCost() int {
-	return n.GCost + n.HCost
+// parseObstacles 从字符串解析障碍点
+// 参数:
+//   disablePoints: 障碍点字符串, 格式: "x1,y1|x2,y2|..."
+func (a *AStar) parseObstacles(disablePoints string) {
+	a.obstacles = make(map[Point]bool)
+	if disablePoints == "" {
+		return
+	}
+
+	points := strings.Split(disablePoints, "|")
+	for _, point := range points {
+		var x, y int
+		if _, err := fmt.Sscanf(point, "%d,%d", &x, &y); err == nil {
+			a.obstacles[Point{X: x, Y: y}] = true
+		}
+	}
 }
 
-// PriorityQueue 优先队列
-// 用于A*算法中的开放列表
-type PriorityQueue []*Node
-
-// Len 获取队列长度
+// isValid 检查点是否在地图范围内
+// 参数:
+//   p: 要检查的点
 // 返回值:
-//   int: 队列长度
+//   bool: 有效返回true, 否则返回false
+func (a *AStar) isValid(p Point) bool {
+	return p.X >= 0 && p.X < a.mapWidth && p.Y >= 0 && p.Y < a.mapHeight
+}
+
+// findPath 使用A*算法查找从起点到终点的最短路径
+// 参数:
+//   start: 起点
+//   end: 终点
+// 返回值:
+//   []Point: 路径点
+func (a *AStar) findPath(start, end Point) []Point {
+	// 创建开放和关闭集合
+	openSet := &PriorityQueue{}
+	heap.Init(openSet)
+
+	// 跟踪已访问节点
+	closedSet := make(map[Point]bool)
+
+	// 跟踪g分数(从起点开始的成本)
+	gScore := make(map[Point]int)
+	gScore[start] = 0
+
+	// 跟踪父节点用于路径重建
+	parent := make(map[Point]Point)
+
+	// 将起点添加到开放集合
+	heap.Push(openSet, &AStarNode{
+		Point:    start,
+		GScore:   0,
+		FScore:   a.heuristic(start, end),
+	})
+
+	// 主循环
+	for openSet.Len() > 0 {
+		// 获取f分数最低的节点
+		current := heap.Pop(openSet).(*AStarNode)
+
+		// 检查是否到达终点
+		if current.Point == end {
+			return a.reconstructPath(parent, current.Point)
+		}
+
+		// 如果已处理则跳过
+		if closedSet[current.Point] {
+			continue
+		}
+		closedSet[current.Point] = true
+
+		// 检查邻居
+		for _, neighbor := range a.getNeighbors(current.Point) {
+			// 如果在关闭集合中或是障碍点则跳过
+			if closedSet[neighbor] || a.obstacles[neighbor] {
+				continue
+			}
+
+			// 计算临时g分数
+			tentativeG := gScore[current.Point] + 1
+
+			// 如果找到更好的路径则更新
+			if _, exists := gScore[neighbor]; !exists || tentativeG < gScore[neighbor] {
+				parent[neighbor] = current.Point
+				gScore[neighbor] = tentativeG
+				fScore := tentativeG + a.heuristic(neighbor, end)
+
+				heap.Push(openSet, &AStarNode{
+					Point:    neighbor,
+					GScore:   tentativeG,
+					FScore:   fScore,
+				})
+			}
+		}
+	}
+
+	// 未找到路径
+	return nil
+}
+
+// getNeighbors 获取点的有效邻居
+// 参数:
+//   p: 当前点
+// 返回值:
+//   []Point: 有效邻居点
+func (a *AStar) getNeighbors(p Point) []Point {
+	neighbors := []Point{
+		{X: p.X + 1, Y: p.Y},     // 右
+		{X: p.X - 1, Y: p.Y},     // 左
+		{X: p.X, Y: p.Y + 1},     // 下
+		{X: p.X, Y: p.Y - 1},     // 上
+		{X: p.X + 1, Y: p.Y + 1}, // 右下
+		{X: p.X - 1, Y: p.Y + 1}, // 左下
+		{X: p.X + 1, Y: p.Y - 1}, // 右上
+		{X: p.X - 1, Y: p.Y - 1}, // 左上
+	}
+
+	var valid []Point
+	for _, n := range neighbors {
+		if a.isValid(n) {
+			valid = append(valid, n)
+		}
+	}
+	return valid
+}
+
+// heuristic 计算两点之间的启发式距离
+// 参数:
+//   a: 第一个点
+//   b: 第二个点
+// 返回值:
+//   int: 启发式距离
+func (a *AStar) heuristic(p1, p2 Point) int {
+	dx := p1.X - p2.X
+	dy := p1.Y - p2.Y
+	if dx < 0 {
+		dx = -dx
+	}
+	if dy < 0 {
+		dy = -dy
+	}
+	// 使用切比雪夫距离用于8方向移动
+	if dx > dy {
+		return dx
+	}
+	return dy
+}
+
+// reconstructPath 从父指针重建路径
+// 参数:
+//   parent: 父映射
+//   end: 终点
+// 返回值:
+//   []Point: 路径点
+func (a *AStar) reconstructPath(parent map[Point]Point, end Point) []Point {
+	var path []Point
+	current := end
+
+	for current != (Point{}) {
+		path = append([]Point{current}, path...)
+		current = parent[current]
+	}
+
+	return path
+}
+
+// pathToString 将路径点转换为字符串格式
+// 参数:
+//   path: 路径点
+// 返回值:
+//   string: 路径字符串, 格式: "x1,y1|x2,y2|..."
+func (a *AStar) pathToString(path []Point) string {
+	if len(path) == 0 {
+		return ""
+	}
+
+	var parts []string
+	for _, p := range path {
+		parts = append(parts, fmt.Sprintf("%d,%d", p.X, p.Y))
+	}
+	return strings.Join(parts, "|")
+}
+
+// AStarNode 表示A*算法中的节点
+type AStarNode struct {
+	Point    Point
+	GScore   int
+	FScore   int
+}
+
+// PriorityQueue 实现A*算法的优先队列
+type PriorityQueue []*AStarNode
+
+// Len 返回优先队列的长度
 func (pq PriorityQueue) Len() int { return len(pq) }
 
-// Less 比较两个节点的优先级
-// 参数:
-//   i, j: 节点索引
-// 返回值:
-//   bool: i是否小于j
+// Less 通过f分数比较两个节点
 func (pq PriorityQueue) Less(i, j int) bool {
-	return pq[i].FCost() < pq[j].FCost()
+	return pq[i].FScore < pq[j].FScore
 }
 
 // Swap 交换两个节点
-// 参数:
-//   i, j: 节点索引
 func (pq PriorityQueue) Swap(i, j int) {
 	pq[i], pq[j] = pq[j], pq[i]
 }
 
-// Push 向队列中添加节点
-// 参数:
-//   x: 节点指针
+// Push 向优先队列添加节点
 func (pq *PriorityQueue) Push(x interface{}) {
-	node := x.(*Node)
+	node := x.(*AStarNode)
 	*pq = append(*pq, node)
 }
 
-// Pop 从队列中移除并返回节点
-// 返回值:
-//   interface{}: 节点指针
+// Pop 移除并返回最高优先级的节点
 func (pq *PriorityQueue) Pop() interface{} {
 	old := *pq
 	n := len(old)
 	node := old[n-1]
-	*pq = old[0 : n-1]
+	*pq = old[:n-1]
 	return node
-}
-
-// AStar A*寻路算法
-// 参数:
-//   start: 起点坐标
-//   end: 终点坐标
-//   isWalkable: 判断某点是否可通行的函数
-// 返回值:
-//   []Point: 路径点列表，如果找不到路径返回nil
-func AStar(start, end Point, isWalkable func(Point) bool) []Point {
-	openList := &PriorityQueue{}
-	heap.Init(openList)
-
-	startNode := &Node{
-		Point: start,
-		GCost: 0,
-		HCost: heuristic(start, end),
-	}
-	heap.Push(openList, startNode)
-
-	closedSet := make(map[Point]bool)
-
-	for openList.Len() > 0 {
-		current := heap.Pop(openList).(*Node)
-
-		if current.Point.Equals(end) {
-			return reconstructPath(current)
-		}
-
-		closedSet[current.Point] = true
-
-		for _, neighbor := range getNeighbors(current.Point) {
-			if closedSet[neighbor] || !isWalkable(neighbor) {
-				continue
-			}
-
-			gCost := current.GCost + 1
-			hCost := heuristic(neighbor, end)
-
-			newNode := &Node{
-				Point:  neighbor,
-				GCost:  gCost,
-				HCost:  hCost,
-				Parent: current,
-			}
-
-			heap.Push(openList, newNode)
-		}
-	}
-
-	return nil
-}
-
-// heuristic 启发式函数 (曼哈顿距离)
-// 参数:
-//   a, b: 两个点
-// 返回值:
-//   int: 曼哈顿距离
-func heuristic(a, b Point) int {
-	dx := abs(a.X - b.X)
-	dy := abs(a.Y - b.Y)
-	return dx + dy
-}
-
-// abs 计算绝对值
-// 参数:
-//   x: 整数
-// 返回值:
-//   int: 绝对值
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
-
-// getNeighbors 获取相邻的可行走点
-// 参数:
-//   p: 当前点
-// 返回值:
-//   []Point: 相邻点列表
-func getNeighbors(p Point) []Point {
-	return []Point{
-		{p.X + 1, p.Y},
-		{p.X - 1, p.Y},
-		{p.X, p.Y + 1},
-		{p.X, p.Y - 1},
-	}
-}
-
-// reconstructPath 重建路径
-// 参数:
-//   node: 终点节点
-// 返回值:
-//   []Point: 路径点列表
-func reconstructPath(node *Node) []Point {
-	var path []Point
-	for node != nil {
-		path = append([]Point{node.Point}, path...)
-		node = node.Parent
-	}
-	return path
-}
-
-// Distance 计算两点之间的欧几里得距离
-// 参数:
-//   p1, p2: 两个点
-// 返回值:
-//   float64: 距离
-func Distance(p1, p2 Point) float64 {
-	dx := float64(p1.X - p2.X)
-	dy := float64(p1.Y - p2.Y)
-	return math.Sqrt(dx*dx + dy*dy)
-}
-
-// ManhattanDistance 计算两点之间的曼哈顿距离
-// 参数:
-//   p1, p2: 两个点
-// 返回值:
-//   int: 曼哈顿距离
-func ManhattanDistance(p1, p2 Point) int {
-	return abs(p1.X-p2.X) + abs(p1.Y-p2.Y)
 }

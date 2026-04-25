@@ -1,75 +1,75 @@
 @echo off
 REM ============================================================
-REM OP插件DLL构建脚本
-REM 支持编译为x86和x64架构的DLL
+REM GOP Plugin DLL Build Script
+REM Supports building x86 and x64 DLLs
 REM ============================================================
 
 echo ========================================
-echo OP插件DLL构建脚本
+echo GOP Plugin DLL Build Script
 echo ========================================
 echo.
 
-REM 检查Go是否安装
+REM Check if Go is installed
 where go >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [错误] 未找到Go，请先安装Go环境
+    echo [ERROR] Go not found. Please install Go first.
     pause
     exit /b 1
 )
 
-echo [信息] Go版本:
+echo [INFO] Go Version:
 go version
 echo.
 
-REM 创建输出目录
+REM Create output directory
 if not exist "build" mkdir build
 
-REM 下载依赖
-echo [信息] 下载依赖...
+REM Download dependencies
+echo [INFO] Downloading dependencies...
 go mod tidy
 echo.
 
-REM 编译x64 DLL
+REM Build x64 DLL
 echo ========================================
-echo 开始编译 x64 DLL...
+echo Building x64 DLL...
 echo ========================================
 set GOARCH=amd64
 set CGO_ENABLED=1
 go build -buildmode=c-shared -o build/gop_amd64.dll ./dll
 if %errorlevel% equ 0 (
-    echo [成功] x64 DLL编译完成: build/gop_amd64.dll
+    echo [SUCCESS] x64 DLL built: build/gop_amd64.dll
 ) else (
-    echo [失败] x64 DLL编译失败
+    echo [FAILED] x64 DLL build failed
     pause
     exit /b 1
 )
 echo.
 
-REM 编译x86 DLL
+REM Build x86 DLL
 echo ========================================
-echo 开始编译 x86 DLL...
+echo Building x86 DLL...
 echo ========================================
 set GOARCH=386
 go build -buildmode=c-shared -o build/gop_386.dll ./dll
 if %errorlevel% equ 0 (
-    echo [成功] x86 DLL编译完成: build/gop_386.dll
+    echo [SUCCESS] x86 DLL built: build/gop_386.dll
 ) else (
-    echo [失败] x86 DLL编译失败
+    echo [FAILED] x86 DLL build failed
     pause
     exit /b 1
 )
 echo.
 
-REM 显示编译结果
+REM Show results
 echo ========================================
-echo 编译完成！
+echo Build Complete!
 echo ========================================
-echo 输出文件:
+echo Output files:
 dir /b build\*.dll
 echo.
-echo 文件大小:
+echo File sizes:
 for %%f in (build\*.dll) do (
-    echo   %%~nf: %%~zf 字节
+    echo   %%~nf: %%~zf bytes
 )
 echo.
 
