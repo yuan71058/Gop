@@ -493,8 +493,36 @@ func (b *Background) SendString(str string) int {
 		// 前台模式使用剪贴板方法
 		return 1
 	}
-	// TODO: 根据键盘模式实现
-	return 1
+	
+	// 后台模式: 使用WM_SETTEXT消息直接设置窗口文本
+	user32 := syscall.NewLazyDLL("user32.dll")
+	strPtr, _ := syscall.UTF16PtrFromString(str)
+	
+	ret, _, _ := user32.NewProc("SendMessageW").Call(
+		uintptr(b.hwnd),
+		0x000C, // WM_SETTEXT
+		0,
+		uintptr(unsafe.Pointer(strPtr)),
+	)
+	
+	// WM_SETTEXT 成功返回非零
+	if ret != 0 {
+		return 1
+	}
+	return 0
+}
+
+// SendStringIme 向目标发送字符串(使用IME)
+// 参数:
+//
+//	str: 要发送的字符串
+//
+// 返回值:
+//
+//	int: 1表示成功, 0表示失败
+func (b *Background) SendStringIme(str string) int {
+	// SendStringIme 与 SendString 实现相同
+	return b.SendString(str)
 }
 
 // GetKeyState 获取指定键的状态

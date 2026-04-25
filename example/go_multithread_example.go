@@ -69,7 +69,7 @@ func (w *TextWorker) BindWindow() bool {
 func (w *TextWorker) WriteText() {
 	fmt.Printf("[线程%d] 开始写入文字...\n", w.ID)
 
-	// 使用SendString发送文字
+	// 使用SendString发送文字(绑定窗口后使用后台模式)
 	ret := w.OP.SendString(w.EditHwnd, w.Content)
 	if ret != 1 {
 		fmt.Printf("[线程%d] SendString失败: %d\n", w.ID, ret)
@@ -79,7 +79,7 @@ func (w *TextWorker) WriteText() {
 	// 延时,让文字显示更清晰
 	time.Sleep(500 * time.Millisecond)
 
-	fmt.Printf("[线程%d] 写入完成, 共%d个字符\n", w.ID, len(w.Content))
+	fmt.Printf("[线程%d] 写入完成, 共%d个字符\n", w.ID, len([]rune(w.Content)))
 }
 
 // UnbindWindow 解绑窗口

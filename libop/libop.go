@@ -523,6 +523,12 @@ func (op *LibOP) SetWindowTransparent(hwnd, trans int) int {
 // 返回值:
 //   int: 1表示成功, 0表示失败
 func (op *LibOP) SendString(hwnd int, str string) int {
+	// 如果已绑定窗口,使用后台模式
+	bindHwnd := op.bkproc.GetBindWindow()
+	if bindHwnd != 0 {
+		return op.bkproc.SendString(str)
+	}
+	// 否则使用winapi直接发送
 	return op.winapi.SendString(hwnd, str)
 }
 
@@ -533,6 +539,12 @@ func (op *LibOP) SendString(hwnd int, str string) int {
 // 返回值:
 //   int: 1表示成功, 0表示失败
 func (op *LibOP) SendStringIme(hwnd int, str string) int {
+	// 如果已绑定窗口,使用后台模式
+	bindHwnd := op.bkproc.GetBindWindow()
+	if bindHwnd != 0 {
+		return op.bkproc.SendStringIme(str)
+	}
+	// 否则使用winapi直接发送
 	return op.winapi.SendStringIme(hwnd, str)
 }
 

@@ -785,13 +785,19 @@ func (w *WinApi) MoveWindow(hwnd, x, y int) int {
 	}
 	width := rect[2] - rect[0]
 	height := rect[3] - rect[1]
+	
+	// 如果窗口最小化,先还原
+	if w.GetWindowState(hwnd, 2) == 1 {
+		w.SetWindowState(hwnd, 4) // 还原窗口
+	}
+	
 	ret, _, _ = w.user32.NewProc("MoveWindow").Call(
 		uintptr(hwnd),
 		uintptr(x),
 		uintptr(y),
 		uintptr(width),
 		uintptr(height),
-		1,
+		1, // 重绘
 	)
 	if ret != 0 {
 		return 1
