@@ -10,6 +10,73 @@ import (
 	"unsafe"
 )
 
+// enumWindowsState 枚举窗口状态
+type enumWindowsState struct {
+	targetPid int
+	className string
+	title     string
+	hwnds     []int
+}
+
+// enumWindowsCallback 枚举窗口的回调函数
+//go:uintptrescapes
+func enumWindowsCallback(hwnd uintptr, lParam uintptr) uintptr {
+	state := (*enumWindowsState)(unsafe.Pointer(lParam))
+	
+	// 获取窗口所属的进程ID
+	var pid uint32
+	syscall.SyscallN(
+		syscall.NewLazyDLL("user32.dll").NewProc("GetWindowThreadProcessId").Addr(),
+		hwnd,
+		uintptr(unsafe.Pointer(&pid)),
+		0,
+	)
+	
+	// 如果指定了目标PID,检查是否匹配
+	if state.targetPid > 0 && int(pid) != state.targetPid {
+		return 1 // 继续枚举
+	}
+	
+	// 检查窗口是否可见
+	ret, _, _ := syscall.NewLazyDLL("user32.dll").NewProc("IsWindowVisible").Call(hwnd)
+	if ret == 0 {
+		return 1 // 继续枚举
+	}
+	
+	// 获取窗口类名
+	buf := make([]uint16, 256)
+	syscall.NewLazyDLL("user32.dll").NewProc("GetClassNameW").Call(
+		hwnd,
+		uintptr(unsafe.Pointer(&buf[0])),
+		uintptr(len(buf)),
+	)
+	className := syscall.UTF16ToString(buf)
+	
+	// 获取窗口标题
+	titleBuf := make([]uint16, 512)
+	syscall.NewLazyDLL("user32.dll").NewProc("GetWindowTextW").Call(
+		hwnd,
+		uintptr(unsafe.Pointer(&titleBuf[0])),
+		uintptr(len(titleBuf)),
+	)
+	title := syscall.UTF16ToString(titleBuf)
+	
+	// 匹配类名
+	if state.className != "" && className != state.className {
+		return 1
+	}
+	
+	// 匹配标题
+	if state.title != "" && title != state.title {
+		return 1
+	}
+	
+	// 添加到结果列表
+	state.hwnds = append(state.hwnds, int(hwnd))
+	
+	return 1 // 继续枚举
+}
+
 // WinApi 提供Windows API封装
 // 封装Windows API函数，用于窗口和进程管理
 type WinApi struct {
@@ -198,6 +265,53 @@ func (w *WinApi) GetWindowClass(hwnd int) string {
 	return syscall.UTF16ToString(buf[:ret])
 }
 
+// GetDesktopWindow 获取桌面窗口句柄
+// 返回值:
+//   syscall.Handle: 桌面窗口句柄
+func (w *WinApi) GetDesktopWindow() syscall.Handle {
+	ret, _, _ := w.user32.NewProc("GetDesktopWindow").Call()
+	return syscall.Handle(ret)
+}
+
+// IsWindowVisible 检查窗口是否可见
+// 参数:
+//   hwnd: 窗口句柄
+// 返回值:
+//   bool: true表示可见, false表示不可见
+func (w *WinApi) IsWindowVisible(hwnd int) bool {
+	ret, _, _ := w.user32.NewProc("IsWindowVisible").Call(
+		uintptr(hwnd),
+	)
+	return ret != 0
+}
+
+// GetClassName 获取窗口类名(int版本)
+// 参数:
+//   hwnd: 窗口句柄
+// 返回值:
+//   string: 窗口类名
+func (w *WinApi) GetClassName(hwnd int) string {
+	return w.GetWindowClass(hwnd)
+}
+
+// GetWindowText 获取窗口标题(int版本)
+// 参数:
+//   hwnd: 窗口句柄
+// 返回值:
+//   string: 窗口标题
+func (w *WinApi) GetWindowTextInt(hwnd int) string {
+	buf := make([]uint16, 512)
+	ret, _, _ := w.user32.NewProc("GetWindowTextW").Call(
+		uintptr(hwnd),
+		uintptr(unsafe.Pointer(&buf[0])),
+		uintptr(len(buf)),
+	)
+	if ret == 0 {
+		return ""
+	}
+	return syscall.UTF16ToString(buf[:ret])
+}
+
 // GetWindowProcessId 获取指定窗口的进程ID
 // 参数:
 //   hwnd: 窗口句柄
@@ -316,8 +430,82 @@ func (w *WinApi) EnumProcess(name string) string {
 // 返回值:
 //   string: 窗口句柄字符串，格式: "hwnd1,hwnd2|..."
 func (w *WinApi) EnumWindow(parent int, title, className string, filter int) string {
-	// TODO: 使用EnumWindows API实现窗口枚举
-	return ""
+	var hwnds []int
+
+	// 如果parent为0,使用桌面窗口
+	if parent == 0 {
+		parent = int(w.GetDesktopWindow())
+	}
+
+	// 获取第一个子窗口
+	hwnd := w.GetWindow(parent, 1) // GW_CHILD
+	if hwnd == 0 {
+		return ""
+	}
+
+	// 获取第一个窗口
+	hwnd = w.GetWindow(hwnd, 1) // GW_HWNDFIRST
+
+	// 遍历所有窗口
+	count := 0
+	maxCount := 1000 // 防止无限循环
+	for hwnd != 0 && count < maxCount {
+		count++
+		
+		// 检查是否可见
+		if (filter & 16) != 0 {
+			if !w.IsWindowVisible(hwnd) {
+				hwnd = w.GetWindow(hwnd, 2) // GW_HWNDNEXT
+				continue
+			}
+		}
+
+		// 获取窗口类名
+		windowClassName := w.GetClassName(hwnd)
+		// 获取窗口标题
+		windowTitle := w.GetWindowTextInt(hwnd)
+
+		// 根据filter进行匹配
+		match := false
+		switch {
+		case filter == 0: // 所有模式
+			match = true
+		case (filter & 1) != 0 && title != "": // 匹配窗口标题
+			if windowTitle == title {
+				match = true
+			}
+		case (filter & 2) != 0 && className != "": // 匹配窗口类名
+			if windowClassName == className {
+				match = true
+			}
+		case (filter & 3) != 0: // 匹配类名或标题
+			if (className != "" && windowClassName == className) || (title != "" && windowTitle == title) {
+				match = true
+			}
+		}
+
+		if match {
+			hwnds = append(hwnds, hwnd)
+		}
+
+		// 获取下一个窗口
+		nextHwnd := w.GetWindow(hwnd, 2) // GW_HWNDNEXT
+		if nextHwnd == hwnd {
+			break // 防止死循环
+		}
+		hwnd = nextHwnd
+	}
+
+	// 转换为字符串
+	if len(hwnds) == 0 {
+		return ""
+	}
+
+	result := fmt.Sprintf("%d", hwnds[0])
+	for i := 1; i < len(hwnds); i++ {
+		result += fmt.Sprintf(",%d", hwnds[i])
+	}
+	return result
 }
 
 // EnumWindowByProcess 枚举符合指定进程和条件的窗口
@@ -353,7 +541,46 @@ func (w *WinApi) FindWindowByProcess(processName, className, title string) int {
 // 返回值:
 //   int: 窗口句柄，找不到返回0
 func (w *WinApi) FindWindowByProcessId(processId int, className, title string) int {
-	// TODO: 实现基于PID的窗口查找
+	// 获取桌面窗口
+	desktop := w.GetDesktopWindow()
+	
+	// 获取第一个子窗口
+	hwnd := w.GetWindow(int(desktop), 1) // GW_CHILD
+	
+	// 遍历所有窗口
+	for hwnd != 0 {
+		// 获取窗口所属的进程ID
+		windowPid := w.GetWindowProcessId(hwnd)
+		
+		// 检查是否匹配进程ID
+		if windowPid == processId {
+			// 检查是否可见
+			if w.IsWindowVisible(hwnd) {
+				// 如果指定了类名或标题,进行匹配
+				if className != "" {
+					winClassName := w.GetClassName(hwnd)
+					if winClassName != className {
+						hwnd = w.GetWindow(hwnd, 2)
+						continue
+					}
+				}
+				
+				if title != "" {
+					winTitle := w.GetWindowTextInt(hwnd)
+					if winTitle != title {
+						hwnd = w.GetWindow(hwnd, 2)
+						continue
+					}
+				}
+				
+				return hwnd
+			}
+		}
+		
+		// 获取下一个窗口
+		hwnd = w.GetWindow(hwnd, 2) // GW_HWNDNEXT
+	}
+	
 	return 0
 }
 
