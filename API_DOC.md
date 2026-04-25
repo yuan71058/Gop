@@ -176,6 +176,24 @@ int GetLastError();
 
 ***
 
+### OpGetLastError
+
+获取OP库最后错误代码。
+
+**函数签名:**
+
+```c
+int OpGetLastError();
+```
+
+**参数:** 无
+
+**返回值:**
+
+- `int`: 错误代码
+
+***
+
 ### SetShowErrorMsg
 
 设置是否显示错误消息。
